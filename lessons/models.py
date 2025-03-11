@@ -98,6 +98,101 @@ class Slide(models.Model):
 
     def __str__(self):
         return f"{self.lesson.title} - Slide {self.order}: {self.get_type_display()}"
+    
+
+class MediaFile(models.Model):
+    """Model for media files attached to slides."""
+
+    class MediaType(models.TextChoices):
+        IMAGE = 'image', _('Image')
+        VIDEO = 'video', _('Video')
+        AUDIO = 'audio', _('Audio')
+        DOCUMENT = 'document', _('Document')
+        OTHER = 'other', _('Other')
+
+    slide = models.ForeignKey(
+        'Slide',
+        on_delete=models.CASCADE,
+        related_name='media_files',
+        verbose_name=_("Slide"),
+    )
+    title = models.CharField(max_length=255, verbose_name=_("Title"))
+    description = models.TextField(blank=True, verbose_name=_("Description"))
+    file = models.FileField(
+        upload_to='slides/media/%Y/%m/%d/',
+        verbose_name=_("File"),
+    )
+    media_type = models.CharField(
+        max_length=20,
+        choices=MediaType.choices,
+        default=MediaType.OTHER,
+        verbose_name=_("Media Type"),
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name=_("Order"))
+    created_at = models.DateTimeField(
+        auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(
+        auto_now=True, verbose_name=_("Updated At"))
+
+    # Additional metadata
+    file_size = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        editable=False,
+        verbose_name=_("File Size (bytes)"),
+    )
+    content_type = models.CharField(
+        max_length=100,
+        blank=True,
+        editable=False,
+        verbose_name=_("Content Type"),
+    )
+
+    class Meta:
+        verbose_name = _("Media File")
+        verbose_name_plural = _("Media Files")
+        ordering = ['slide', 'order']
+
+    def __str__(self):
+        return f"{self.get_media_type_display()}: {self.title}"
+
+    def save(self, *args, **kwargs):
+        # Update file size if available
+        if self.file and hasattr(self.file, 'size'):
+            self.file_size = self.file.size
+
+        # Try to determine media type from file extension if not set
+        if not self.media_type or self.media_type == MediaFile.MediaType.OTHER:
+            file_name = self.file.name.lower()
+            if file_name.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp')):
+                self.media_type = MediaFile.MediaType.IMAGE
+            elif file_name.endswith(('.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv')):
+                self.media_type = MediaFile.MediaType.VIDEO
+            elif file_name.endswith(('.mp3', '.wav', '.ogg', '.m4a', '.flac')):
+                self.media_type = MediaFile.MediaType.AUDIO
+            elif file_name.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt')):
+                self.media_type = MediaFile.MediaType.DOCUMENT
+
+        super().save(*args, **kwargs)
+
+    @property
+    def file_extension(self):
+        """Return the file extension."""
+        if self.file and hasattr(self.file, 'name'):
+            import os
+            return os.path.splitext(self.file.name)[1].lower()
+        return ""
+
+    @property
+    def is_image(self):
+        """Check if the file is an image."""
+        return self.media_type == MediaFile.MediaType.IMAGE
+
+    @property
+    def is_video(self):
+        """Check if the file is a video."""
+        return self.media_type == MediaFile.MediaType.VIDEO
+
 
 
 class CodeEditor(models.Model):
@@ -342,97 +437,3 @@ class LessonReviewQuestionAttempt(models.Model):
 
     def __str__(self):
         return f"{self.review.user.username} - {self.question_slide.question} Review Attempt"
-
-
-class MediaFile(models.Model):
-    """Model for media files attached to slides."""
-
-    class MediaType(models.TextChoices):
-        IMAGE = 'image', _('Image')
-        VIDEO = 'video', _('Video')
-        AUDIO = 'audio', _('Audio')
-        DOCUMENT = 'document', _('Document')
-        OTHER = 'other', _('Other')
-
-    slide = models.ForeignKey(
-        'Slide',
-        on_delete=models.CASCADE,
-        related_name='media_files',
-        verbose_name=_("Slide"),
-    )
-    title = models.CharField(max_length=255, verbose_name=_("Title"))
-    description = models.TextField(blank=True, verbose_name=_("Description"))
-    file = models.FileField(
-        upload_to='slides/media/%Y/%m/%d/',
-        verbose_name=_("File"),
-    )
-    media_type = models.CharField(
-        max_length=20,
-        choices=MediaType.choices,
-        default=MediaType.OTHER,
-        verbose_name=_("Media Type"),
-    )
-    order = models.PositiveIntegerField(default=0, verbose_name=_("Order"))
-    created_at = models.DateTimeField(
-        auto_now_add=True, verbose_name=_("Created At"))
-    updated_at = models.DateTimeField(
-        auto_now=True, verbose_name=_("Updated At"))
-
-    # Additional metadata
-    file_size = models.PositiveIntegerField(
-        blank=True,
-        null=True,
-        editable=False,
-        verbose_name=_("File Size (bytes)"),
-    )
-    content_type = models.CharField(
-        max_length=100,
-        blank=True,
-        editable=False,
-        verbose_name=_("Content Type"),
-    )
-
-    class Meta:
-        verbose_name = _("Media File")
-        verbose_name_plural = _("Media Files")
-        ordering = ['slide', 'order']
-
-    def __str__(self):
-        return f"{self.get_media_type_display()}: {self.title}"
-
-    def save(self, *args, **kwargs):
-        # Update file size if available
-        if self.file and hasattr(self.file, 'size'):
-            self.file_size = self.file.size
-
-        # Try to determine media type from file extension if not set
-        if not self.media_type or self.media_type == MediaFile.MediaType.OTHER:
-            file_name = self.file.name.lower()
-            if file_name.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp')):
-                self.media_type = MediaFile.MediaType.IMAGE
-            elif file_name.endswith(('.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv')):
-                self.media_type = MediaFile.MediaType.VIDEO
-            elif file_name.endswith(('.mp3', '.wav', '.ogg', '.m4a', '.flac')):
-                self.media_type = MediaFile.MediaType.AUDIO
-            elif file_name.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt')):
-                self.media_type = MediaFile.MediaType.DOCUMENT
-
-        super().save(*args, **kwargs)
-
-    @property
-    def file_extension(self):
-        """Return the file extension."""
-        if self.file and hasattr(self.file, 'name'):
-            import os
-            return os.path.splitext(self.file.name)[1].lower()
-        return ""
-
-    @property
-    def is_image(self):
-        """Check if the file is an image."""
-        return self.media_type == MediaFile.MediaType.IMAGE
-
-    @property
-    def is_video(self):
-        """Check if the file is a video."""
-        return self.media_type == MediaFile.MediaType.VIDEO
